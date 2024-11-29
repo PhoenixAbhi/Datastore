@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Info Storage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        input[type="text"], input[type="file"], button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .files {
+            display: flex;
+            gap: 10px;
+        }
+        .file-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 100px;
+            text-align: center;
+        }
+        .file-item img {
+            max-width: 100px;
+            max-height: 100px;
+        }
+        .file-item span {
+            display: block;
+            margin-top: 10px;
+        }
+        .search-container {
+            margin: 20px 0;
+        }
+        .result {
+            margin-top: 20px;
+        }
+        .whatsapp-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #25D366;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .whatsapp-btn:disabled {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Store User Information</h2>
+
+        <form id="userForm">
+            <input type="text" id="userId" placeholder="User ID" required><br>
+            <input type="text" id="phone" placeholder="Phone Number" required><br>
+            <input type="text" id="aadhar" placeholder="Aadhaar Number" required><br>
+
+            <div class="files">
+                <div>
+                    <input type="file" id="drivingLicense" accept="image/*"><br>
+                    <span>Driving License</span>
+                </div>
+                <div>
+                    <input type="file" id="insurance" accept="image/*"><br>
+                    <span>Insurance</span>
+                </div>
+                <div>
+                    <input type="file" id="aadharCard" accept="image/*"><br>
+                    <span>Aadhaar Card</span>
+                </div>
+            </div>
+
+            <button type="submit">Save Info</button>
+        </form>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search User ID or Phone Number" oninput="searchInfo()">
+        </div>
+
+        <div class="result" id="searchResult"></div>
+
+        <button class="whatsapp-btn" id="whatsappBtn" onclick="shareViaWhatsapp()" disabled>Share on WhatsApp</button>
+    </div>
+
+    <!-- Firebase SDK (Modular version) -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCEZtSqQeGkiz8VkKodS8GbIWqHtFw1N7c",
+            authDomain: "tore-699d8.firebaseapp.com",
+            projectId: "tore-699d8",
+            storageBucket: "tore-699d8.firebasestorage.app",
+            messagingSenderId: "632747664687",
+            appId: "1:632747664687:web:43b8da518ce3d32c2dedda",
+            measurementId: "G-LPYD9EWH38"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const storage = getStorage(app);
+
+        // Handle form submission
+        document.getElementById('userForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const userId = document.getElementById('userId').value;
+            const phone = document.getElementById('phone').value;
+            const aadhar = document.getElementById('aadhar').value;
+
+            const drivingLicense = document.getElementById('drivingLicense').files[0];
+            const insurance = document.getElementById('insurance').files[0];
+            const aadharCard = document.getElementById('aadharCard').files[0];
+
+            if (!userId || !phone || !aadhar || !drivingLicense || !insurance || !aadharCard) {
+                alert('Please fill all fields and upload all images');
+                return;
+            }
+
+            // Upload images to Firebase Storage and get download URLs
+            const uploadImage = (image, userId, type) => {
+                const storageRefImage = storageRef(storage, 'images/' + userId + '/' + type);
+                return uploadBytes(storageRefImage, image).then(snapshot => {
+                    return getDownloadURL(snapshot.ref);
+                });
+            };
+
+            Promise.all([
+                uploadImage(drivingLicense, userId, 'drivingLicense'),
+                uploadImage(insurance, userId, 'insurance'),
+                uploadImage(aadharCard, userId, 'aadharCard')
+            ]).then(([drivingLicenseUrl, insuranceUrl, aadharCardUrl]) => {
+                const userData = {
+                    userId: userId,
+                    phone: phone,
+                    aadhar: aadhar,
+                    drivingLicense: drivingLicenseUrl,
+                    insurance: insuranceUrl,
+                    aadharCard: aadharCardUrl
+                };
+
+                // Save user data to Firebase Realtime Database
+                set(ref(db, 'users/' + userId), userData).then(() => {
+                    alert('User Info saved successfully!');
+                });
+            }).catch(error => {
+                alert('Error uploading images: ' + error.message);
+            });
+        });
+
+        // Search functionality
+        function searchInfo() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const resultDiv = document.getElementById('searchResult');
+            resultDiv.innerHTML = '';
+
+            // Fetch all users from the Firebase Realtime Database
+            get(ref(db, 'users')).then(snapshot => {
+                if (snapshot.exists()) {
+                    const users = snapshot.val();
+                    for (const userId in users) {
+                        const user = users[userId];
+                        if (user.userId.toLowerCase().includes(searchTerm) || user.phone.includes(searchTerm)) {
+                            const userDiv = document.createElement('div');
+                            userDiv.innerHTML = `
+                                <h3>User ID: ${user.userId}</h3>
+                                <p>Phone: ${user.phone}</p>
+                                <p>Aadhaar: ${user.aadhar}</p>
+                                <div class="files">
+                                    <div class="file-item">
+                                        <img src="${user.drivingLicense}" alt="Driving License" />
+                                        <span>Driving License</span>
+                                    </div>
+                                    <div class="file-item">
+                                        <img src="${user.insurance}" alt="Insurance" />
+                                        <span>Insurance</span>
+                                    </div>
+                                    <div class="file-item">
+                                        <img src="${user.aadharCard}" alt="Aadhaar Card" />
+                                        <span>Aadhaar Card</span>
+                                    </div>
+                                </div>
+                                <button onclick="selectForWhatsApp('${user.userId}')">Select for WhatsApp</button>
+                            `;
+                            resultDiv.appendChild(userDiv);
+                        }
+                    }
+                } else {
+                    resultDiv.innerHTML = 'No users found';
+                }
+            }).catch(error => {
+                console.error('Error fetching user data: ', error);
+            });
+        }
+
+        // Select user data for WhatsApp sharing
+        function selectForWhatsApp(userId) {
+            get(ref(db, 'users/' + userId)).then(snapshot => {
+                window.selectedUser = snapshot.val();
+                document.getElementById('whatsappBtn').disabled = false;
+            });
+        }
+
+        // Share user info via WhatsApp
+        function shareViaWhatsapp() {
+            if (!window.selectedUser) {
+                alert('No user selected for sharing');
+                return;
+            }
+
+            const userData = window.selectedUser;
+            const message = `
+                User ID: ${userData.userId}
+                Phone: ${userData.phone}
+                Aadhaar: ${userData.aadhar}
+            `.replace(/\n/g, '%0A'); // Format message for WhatsApp
+
+            const url = `https://wa.me/?text=${message}`;
+            window.open(url, '_blank');
+        }
+    </script>
+</body>
+</html>
